@@ -1,0 +1,337 @@
+#include <avr/io.h>
+#include <util/delay.h>
+#include "servo.h"
+#include "h_bridge.h"
+void BrugOpen(void);
+void Nood_Delay(int ms, int GaatOpen)
+{
+    int runtimes = ms/10;
+    int exit=0;
+
+    for(int i; i<runtimes; i++)
+    {
+        if (!(PINA)&(1))
+        {
+            exit=1;
+            h_bridge_set_percentage(0);
+            while (!(PINA)&(1))
+            {
+                _delay_ms(10);
+            }
+            if(GaatOpen)
+            {
+                BrugOpen();
+            }
+        }
+        if(exit)
+        {
+            break;
+        }
+        _delay_ms(10);
+    }
+}
+void BrugOpen (void)
+{
+        init_h_bridge();
+        h_bridge_set_percentage(25);
+        Nood_Delay(2500, 1);
+        h_bridge_set_percentage(0);
+}
+void BrugDicht (void)
+{
+        init_h_bridge();
+        h_bridge_set_percentage(-10);
+        Nood_Delay(3800, 0);
+        h_bridge_set_percentage(0);
+}
+int main(void)
+{
+    int Start=0;
+
+//  Boot locaties.
+    int botenRM=0;
+    int botenRL=0;
+    int botenML=0;
+
+    int botenLM=0;
+    int botenLR=0;
+    int botenMR=0;
+
+//  Time integers voor 1 maal executie.
+    int timeRM=0;
+    int timeRL=0;
+    int timeML=0;
+    int timeL=0;
+
+    int timeLM=0;
+    int timeLR=0;
+    int timeMR=0;
+    int timeR=0;
+
+    int time=0;
+    int timeLL=0;
+    int timeRR=0;
+
+//  Richting boot.
+    int VanRechts=0;
+    int VanLinks=0;
+
+//  Stoplicht check
+    int StoplichtRood=0;
+
+    init_h_bridge();
+    init_servo();
+    DDRA=0b00000001;
+    DDRF&=0b11111000;
+    DDRB=0b11111110;
+    PORTB=0b00110100;
+    servo1_set_percentage(100);
+    servo2_set_percentage(100);
+    while(1)
+        {
+            //  Check of boot van links komt.
+            if (!(PINF & (1<<2)))
+            {
+                _delay_ms(250);
+                if(time==0)
+                {
+                    Start++;
+                    VanLinks=1;
+                    time++;
+                }
+            }
+            else
+            {
+                time=0;
+            }
+
+            //  Boot komt van links.
+            while (VanLinks==1)
+            {
+            if (!(PINF & (1<<2)))
+            {
+                _delay_ms(500);
+                if((timeLM==0)&(timeLL==1))
+                {
+                    Start=0;
+                    botenLM++;
+                    timeLM++;
+                    if (StoplichtRood==0)
+                    {
+                        _delay_ms(2500);
+                        PORTB=0b01011100;
+                        _delay_ms(1000);
+                        PORTB=0b10011100;
+                        _delay_ms(2500);
+                        servo1_set_percentage(-100);
+                        servo2_set_percentage(-100);
+                        _delay_ms(2500);
+                        BrugOpen();
+                        _delay_ms(2500);
+                        PORTB=0b10001100;
+                        StoplichtRood=1;
+                    }
+                }
+            }
+            else if ((botenLM>=1)& !(PINF&(1)))
+            {
+                _delay_ms(500);
+                if(timeLR==0)
+                {
+                    PORTB|=0b00000110;
+                    botenLR++;
+                    timeLR++;
+                }
+            }
+            else
+            {
+                timeLM=0;
+                timeLR=0;
+                timeLL=1;
+            }
+            if (botenLM>=1)
+            {
+                if (!(PINF &(1<<1)))
+                {
+                    _delay_ms(500);
+                    if (timeMR==0)
+                    {
+                         botenLM--;
+                         botenMR++;
+                         timeMR++;
+                    }
+                }
+                else
+                {
+                    timeMR=0;
+                }
+            }
+            if (botenMR>=1)
+            {
+                if (!(PINF &(1)))
+                {
+                    _delay_ms(250);
+                    if (timeR==0)
+                    {
+                        botenMR--;
+                        timeR++;
+                    }
+                }
+                else
+                {
+                    timeR=0;
+                }
+            }
+
+            //  Check of er geen doorvaart of wachtende boten zijn.
+            else if((botenLM==0)&(botenMR==0)&(botenLR==0)&(Start==0))
+            {
+                PORTB=0b10010100;
+                _delay_ms(2500);
+                BrugDicht();
+                _delay_ms(2500);
+                servo1_set_percentage(100);
+                servo2_set_percentage(100);
+                _delay_ms(2500);
+                PORTB=0b00110100;
+                StoplichtRood=0;
+                VanLinks=0;
+                VanRechts=0;
+            }
+
+            //  Check of er wachtende boten zijn.
+            else if ((botenLM==0)&(botenMR==0)&(botenLR>=1))
+            {
+                PORTB=0b10010010;
+                VanRechts=1;
+                botenRM=botenLR;
+                VanLinks=0;
+                botenLR=0;
+            }
+            }
+
+            //  Check of boot van rechts komt.
+            if (!(PINF & (1)))
+            {
+                _delay_ms(250);
+                if(time==0)
+                {
+                    Start++;
+                    VanRechts=1;
+                    time++;
+                }
+            }
+            else
+            {
+                time=0;
+            }
+
+        //  Boot komt van rechts.
+        while (VanRechts==1)
+            {
+            if (!(PINF & (1)))
+            {
+                _delay_ms(500);
+                if((timeRM==0)&(timeRR==1))
+                {
+                    Start=0;
+                    botenRM++;
+                    timeRM++;
+                    if (StoplichtRood==0)
+                    {
+                        _delay_ms(1000);
+                        PORTB=0b01010110;
+                        _delay_ms(1000);
+                        PORTB=0b10010110;
+                        _delay_ms(1000);
+                        servo1_set_percentage(-100);
+                        servo2_set_percentage(-100);
+                        _delay_ms(2500);
+                        BrugOpen();
+                        _delay_ms(2500);
+                        PORTB=0b10010010;
+                        StoplichtRood=1;
+                    }
+                }
+            }
+            else if ((botenRM>=1)& !(PINF&(1<<2)))
+            {
+                _delay_ms(500);
+                if(timeRL==0)
+                {
+                    PORTB|=0b00011000;
+                    botenRL++;
+                    timeRL++;
+                }
+            }
+            else
+            {
+                timeRM=0;
+                timeRL=0;
+                timeRR=1;
+            }
+            if (botenRM>=1)
+            {
+                if (!(PINF &(1<<1)))
+                {
+                    _delay_ms(500);
+                    if (timeML==0)
+                    {
+                         botenRM--;
+                         botenML++;
+                         timeML++;
+                    }
+                }
+                else
+                {
+                    timeML=0;
+                }
+            }
+            if (botenML>=1)
+            {
+                if (!(PINF &(1<<2)))
+                {
+                    _delay_ms(250);
+                    if (timeL==0)
+                    {
+                        botenML--;
+                        timeL++;
+                        timeLL=0;
+                    }
+                }
+                else
+                {
+                    timeL=0;
+                }
+            }
+
+            //  Check of er geen doorvaart of wachtende boten zijn.
+            if((botenML==0)&(botenRM==0)&(botenRL==0)&(Start==0))
+            {
+                PORTB=0b10010100;
+                _delay_ms(2500);
+                BrugDicht();
+                _delay_ms(2500);
+                servo1_set_percentage(100);
+                servo2_set_percentage(100);
+                _delay_ms(1500);
+                PORTB=0b00110100;
+                StoplichtRood=0;
+                VanLinks=0;
+                VanRechts=0;
+            }
+
+            //  Check of er wachtende boten zijn.
+            else if ((botenML==0)&(botenRM==0)&(botenRL>=1))
+            {
+                PORTB=0b10001100;
+                VanLinks=1;
+                botenLM=botenRL;
+                VanRechts=0;
+                botenRL=0;
+            }
+            }
+        }
+
+    return 0;
+}
